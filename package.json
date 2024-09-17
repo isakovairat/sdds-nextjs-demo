@@ -9,9 +9,9 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@salutejs/plasma-typo": "0.40.0",
-    "@salutejs/sdds-serv": "0.2.0-canary.1056.7928326755.0",
-    "next": "13.5.6",
+    "@salutejs/sdds-serv": "0.119.0",
+    "@salutejs/sdds-themes": "0.22.0",
+    "next": "14.1.1",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "styled-components": "5.1.1"
@@ -21,6 +21,7 @@
     "@types/react": "18.2.0",
     "@types/react-dom": "18.2.0",
     "@types/styled-components": "5.1.34",
+    "babel-plugin-styled-components": "2.1.4",
     "eslint": "^8",
     "eslint-config-next": "13.5.6",
     "typescript": "^5"
