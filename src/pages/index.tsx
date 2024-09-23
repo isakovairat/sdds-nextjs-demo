@@ -12,19 +12,13 @@ export default function Page() {
             <Col>
               <Tabs size="m" view="clear">
                 <TabItem>
-                  <Button size="m" view="clear">
                     About Sber
-                  </Button>
                 </TabItem>
                 <TabItem>
-                  <Button size="m" view="clear">
                     Exchange rates
-                  </Button>
                 </TabItem>
                 <TabItem>
-                  <Button size="m" view="clear">
                     Contact us
-                  </Button>
                 </TabItem>
               </Tabs>
             </Col>
@@ -48,7 +42,7 @@ export default function Page() {
               </Tabs>
             </Col>
           </Row>
-          <Button view="success">Hello, SDDS!</Button>
+          <Button view="accent">Hello, SDDS!</Button>
           <p style={{ color: textAccent }}>Token usage example</p>
         </Grid>
       </main>
