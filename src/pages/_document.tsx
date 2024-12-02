@@ -37,11 +37,13 @@ export default class MyDocument extends Document {
         <Html lang="ru">
             <Head>
                 <link
-                    rel="stylesheet"
+                    rel="preload"
+                    as="style"
                     href="https://cdn-app.sberdevices.ru/shared-static/0.0.0/styles/SBSansDisplay.0.2.0.css"
                 />
                 <link
-                    rel="stylesheet"
+                    rel="preload"
+                    as="style"
                     href="https://cdn-app.sberdevices.ru/shared-static/0.0.0/styles/SBSansText.0.2.0.css"
                 />
             </Head>
