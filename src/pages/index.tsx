@@ -8,7 +8,7 @@ import { Title } from '@/shared/ui/Title';
 export default function Page() {
   return (
     <Layout>
-      <Indent $s={32} $m={36} $l={60} />
+      <Indent s={32} m={36} l={60} />
       <Grid>
         <Row>
           <Col>
@@ -16,7 +16,7 @@ export default function Page() {
           </Col>
         </Row>
       </Grid>
-      <Indent $s={32} $m={36} $l={60} />
+      <Indent s={32} m={36} l={60} />
     </Layout>
   );
 }
