@@ -1,13 +1,43 @@
-import { useForm, Controller, Control } from 'react-hook-form';
+import { useForm, Controller, Control, UseFormRegister, UseFormGetValues } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Select, TextArea, TextField, Radiobox, NumberInput, Tooltip, Button, H3, Switch, Indicator, Badge, TextS } from '@salutejs/sdds-serv';
-import { DevTool } from "@hookform/devtools";
-import { DndContext, closestCenter, KeyboardSensor, KeyboardSensorProps, useSensor, PointerSensor, useSensors } from '@dnd-kit/core';
-import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import {
+  Select,
+  TextArea,
+  TextField,
+  Radiobox,
+  Tooltip,
+  Button,
+  H3,
+  Switch,
+  Indicator,
+  TextS,
+  Combobox,
+  IconButton,
+  H4,
+  RadioGroup
+} from '@salutejs/sdds-serv';
+import { DevTool } from '@hookform/devtools';
+import { DndContext, KeyboardSensor, useSensor, PointerSensor, useSensors, pointerWithin } from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy
+} from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import {
+  IconCopyOutline,
+  IconDisclosureDownOutline,
+  IconDisclosureUpOutline,
+  IconDrag,
+  IconInfoCircleFill,
+  IconPlus,
+  IconTrashOutline
+} from '@salutejs/plasma-icons';
 
-type FieldType = 'text' | 'textarea' | 'select' | 'radio' | 'number' | 'array' | 'boolean';
+// type FieldType = 'text' | 'textarea' | 'select' | 'radio' | 'number' | 'array' | 'boolean';
 
 interface FieldOption {
   label: string;
@@ -15,36 +45,121 @@ interface FieldOption {
   description?: string;
 }
 
-interface FieldConfig {
-  // Тип
-  type: FieldType;
-  // Обязательность заполнения поля
-  required: boolean;
-  // Информация для чего это поля заполняется
-  info?: string;
-  // Текстовое отображение этого поля
+type FieldConfig =
+  | TextFieldConfig
+  | TextareaFieldConfig
+  | NumberFieldConfig
+  | BooleanFieldConfig
+  | RadioFieldConfig
+  | SelectFieldConfig
+  | ComboboxFieldConfig
+  | ArrayFieldConfig;
+
+// interface FieldConfig {
+//   // Тип
+//   type: FieldType;
+//   // Обязательность заполнения поля
+//   required: boolean;
+//   // Информация для чего это поля заполняется
+//   info?: string;
+//   // Текстовое отображение этого поля
+//   label: string;
+//   // Опции при type = 'select' и при type = 'radio'
+//   options?: FieldOption[];
+//   // Опции max, min при type = 'number'
+//   max?: number;
+//   min?: number;
+//   // Опции arrayFields при type = 'array'
+//   arrayFields?: Record<string, FieldConfig>;
+// }
+
+interface TextFieldConfig {
+  type: 'text';
+  mask?: 'hex' | 'phone' | 'email' | 'url';
+  required?: boolean;
   label: string;
-  // Опции при type = 'select' и при type = 'radio'
-  options?: FieldOption[];
-  // Опции max, min при type = 'number'
+  info?: string;
   max?: number;
   min?: number;
-  // Опции arrayFields при type = 'array'
-  arrayFields?: Record<string, FieldConfig>;
 }
 
-interface ComponentConfig {
+interface TextareaFieldConfig {
+  type: 'textarea';
+  required: boolean;
+  label: string;
+  info?: string;
+  max?: number;
+  min?: number;
+}
+
+interface NumberFieldConfig {
+  type: 'number';
+  required?: boolean;
+  label: string;
+  info?: string;
+  max?: number;
+  min?: number;
+}
+
+interface BooleanFieldConfig {
+  type: 'boolean';
+  required?: boolean;
+  label: string;
+  info?: string;
+}
+
+interface RadioFieldConfig {
+  type: 'radio';
+  required?: boolean;
+  label: string;
+  info?: string;
+  options: FieldOption[];
+}
+
+interface SelectFieldConfig {
+  type: 'select';
+  required?: boolean;
+  label: string;
+  info?: string;
+  options: FieldOption[];
+  // fetchCallback: <T = any>() => Promise<T>;
+  // resolveData: (data: any) => FieldOption[];
+}
+
+interface ComboboxFieldConfig {
+  type: 'combobox';
+  required?: boolean;
+  label: string;
+  info?: string;
+  options: FieldOption[];
+  // fetchCallback: <T = any>() => Promise<T>;
+  // resolveData: (data: any) => FieldOption[];
+}
+
+interface ArrayFieldConfig {
+  type: 'array';
+  required?: boolean;
+  label: string;
+  info?: string;
+  arrayFields: Record<string, FieldConfig>;
+  min?: number;
+  max?: number;
+}
+
+export interface ComponentConfig {
   fields: Record<string, FieldConfig>;
   defaultProps?: Record<string, any>;
   label: string;
-  // children: ComponentChildConfig[];
+  children?: ComponentChildConfig[];
 }
 
 interface ComponentChildConfig {
   fields: Record<string, FieldConfig>;
   defaultProps?: Record<string, any>;
   label: string;
-  visible: boolean;
+  // Технический ключ для поля
+  key: string; // в БД будет сохраняться как ключ объекта
+  visible: boolean; // отвечает за видимость поля в форме
 }
 
 interface AutoFormProps {
@@ -54,7 +169,7 @@ interface AutoFormProps {
 
 type FormValues = Record<string, string | number | undefined>;
 
-const generateZodSchema = (fields: Record<string, FieldConfig>): z.ZodTypeAny => {
+const generateZodSchema = (fields: Record<string, FieldConfig>, children?: ComponentChildConfig[]): z.ZodTypeAny => {
   const schema: Record<string, z.ZodTypeAny> = {};
 
   Object.entries(fields).forEach(([key, field]) => {
@@ -63,20 +178,36 @@ const generateZodSchema = (fields: Record<string, FieldConfig>): z.ZodTypeAny =>
     switch (field.type) {
       case 'text':
       case 'textarea':
-        fieldSchema = z.string();
-        break;
-      case 'number':
-        fieldSchema = z.number();
+        fieldSchema = z.string({ required_error: 'Обязательное поле' }).trim();
+
         if (field.min !== undefined) {
-          fieldSchema = (fieldSchema as z.ZodNumber).min(field.min);
+          fieldSchema = (fieldSchema as z.ZodString).min(field.min, {
+            message: `Минимальная длина ${field.min}`
+          });
         }
         if (field.max !== undefined) {
-          fieldSchema = (fieldSchema as z.ZodNumber).max(field.max);
+          fieldSchema = (fieldSchema as z.ZodString).max(field.max, {
+            message: `Максимальная длина ${field.max}`
+          });
+        }
+        break;
+      case 'number':
+        fieldSchema = z.number({ required_error: 'Обязательное поле' });
+        if (field.min !== undefined) {
+          fieldSchema = (fieldSchema as z.ZodNumber).min(field.min, { message: `Минимальное значение ${field.min}` });
+        }
+        if (field.max !== undefined) {
+          fieldSchema = (fieldSchema as z.ZodNumber).max(field.max, { message: `Максимальное значение ${field.max}` });
         }
         break;
       case 'select':
       case 'radio':
-        fieldSchema = z.enum(field.options?.map(opt => opt.value.toString()) as [string, ...string[]]);
+      case 'combobox':
+        fieldSchema = z.enum(field.options?.map((opt) => opt.value.toString()) as [string, ...string[]], {
+          required_error: 'Обязательное поле',
+          invalid_type_error: 'Неверный тип данных',
+          message: 'Неверный тип данных'
+        });
         break;
       case 'array':
         if (field.arrayFields) {
@@ -93,11 +224,27 @@ const generateZodSchema = (fields: Record<string, FieldConfig>): z.ZodTypeAny =>
     schema[key] = field.required ? fieldSchema : fieldSchema.optional();
   });
 
+  if (children) {
+    schema['children'] = z.array(
+      z.discriminatedUnion('visible', [
+        z.object({
+          visible: z.literal(true),
+          key: z.string(),
+          fields: z.record(z.any())
+        }),
+        z.object({
+          visible: z.literal(false),
+          key: z.string(),
+          fields: z.record(z.any())
+        })
+      ])
+    );
+  }
+
   return z.object(schema);
 };
 
 interface SortableItemProps {
-  field: FieldConfig;
   id: string;
   item: any;
   index: number;
@@ -107,14 +254,8 @@ interface SortableItemProps {
   onEdit: (index: number, key: string, value: string) => void;
 }
 
-const SortableItem = ({ field, id, item, index, onDelete, onToggle, onCopy, onEdit }: SortableItemProps) => {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-  } = useSortable({ id });
+const SortableItem = ({ id, item, index, onDelete, onToggle, onCopy, onEdit }: SortableItemProps) => {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -125,74 +266,56 @@ const SortableItem = ({ field, id, item, index, onDelete, onToggle, onCopy, onEd
     backgroundColor: '#fff',
     boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
     marginBottom: '0.5rem',
-  };
-
-  const stopPropagation = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+    '&:hover': {
+      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+    }
   };
 
   return (
     <div ref={setNodeRef} style={style}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Button
+          <IconButton type="button" view="default" size="xs" {...attributes} {...listeners}>
+            <IconDrag size="xs" color="inherit" />
+          </IconButton>
+          <IconButton type="button" view="default" size="xs" onClick={() => onDelete(index)}>
+            <IconTrashOutline size="xs" color="inherit" />
+          </IconButton>
+          <IconButton
             type="button"
             view="default"
-            size="xxs"
-            {...attributes}
-            {...listeners}
-          >
-            Drag
-          </Button>
-          <Button
-            type="button"
-            view="default"
-            size="xxs"
-            onClick={() =>
-              onDelete(index)
-            }
-          >
-            Del
-          </Button>
-          <Button
-            type="button"
-            view="default"
-            size="xxs"
+            size="xs"
             onClick={() => {
-              onCopy(index)
+              onCopy(index);
             }}
           >
-            Copy
-          </Button>
-          <Button
+            <IconCopyOutline size="xs" color="inherit" />
+          </IconButton>
+          <IconButton
             type="button"
             view="default"
-            size="xxs"
+            size="xs"
             onClick={() => {
-              onToggle(index)
+              onToggle(index);
             }}
           >
-            Open
-          </Button>
+            {item.isExpanded ? (
+              <IconDisclosureUpOutline size="xs" color="inherit" />
+            ) : (
+              <IconDisclosureDownOutline size="xs" color="inherit" />
+            )}
+          </IconButton>
         </div>
       </div>
+
       {item.isExpanded && (
         <div style={{ marginTop: '0.5rem' }}>
           {Object.entries(item).map(([key, val]) => {
-            if (key === 'isExpanded') return null;
+            if (key === 'isExpanded' || key === 'id') return null;
             return (
-              <div key={key} style={{ marginBottom: '0.5rem' }}
-              onMouseDown={stopPropagation}
-              onTouchStart={stopPropagation}
-              onDragStart={stopPropagation}
-              onDrop={stopPropagation}>
+              <div key={key} style={{ marginBottom: '0.5rem' }}>
                 <TextS>{key}</TextS>
-                  <TextField
-                    value={val as string}
-                    onChange={(e) => onEdit(index, key, e.target.value)}
-                    size="s"
-                  />
+                <TextField value={val as string} onChange={(e) => onEdit(index, key, e.target.value)} size="s" />
               </div>
             );
           })}
@@ -202,131 +325,138 @@ const SortableItem = ({ field, id, item, index, onDelete, onToggle, onCopy, onEd
   );
 };
 
-const renderField = (
-  field: FieldConfig,
-  control: Control<FormValues>,
-  errors: any,
-  name: string,
-) => {
+const renderField = ({
+  field,
+  control,
+  getValues,
+  register,
+  errors,
+  name,
+  shouldUnregister
+}: {
+  field: FieldConfig;
+  control: Control<FormValues>;
+  register: UseFormRegister<FormValues>;
+  getValues: UseFormGetValues<FormValues>;
+  errors: any;
+  name: string;
+  shouldUnregister?: boolean;
+}) => {
   switch (field.type) {
     case 'text':
       return (
-        <Controller
-          name={name}
-          control={control}
-          render={({ field: { onChange, value } }) => (
-            <TextField
-              name={name}
-              value={value}
-              onChange={onChange}
-              placeholder={field.label}
-              titleCaption={`${value ? value.toString().length : 0}/${field.max}`}
-              view={errors[name] ? 'negative' : "default"}
-              minLength={field.min}
-              maxLength={field.max}
-              size='s'
-            />
-          )}
+        <TextField
+          {...register(name, {
+            required: field.required,
+            minLength: field.min,
+            maxLength: field.max
+          })}
+          view={errors[name] ? 'negative' : 'default'}
+          // name={name}
+          placeholder={field.label}
+          titleCaption={`${field.max ? `${getValues(name) ? getValues(name)?.toString().length : 0}/${field.max}` : ''}`}
+          minLength={field.min}
+          maxLength={field.max}
+          size="s"
         />
       );
     case 'textarea':
       return (
-        <Controller
-          name={name}
-          control={control}
-          render={({ field: { onChange, value } }) => (
-            <TextArea
-              name={name}
-              value={value}
-              onChange={onChange}
-              label={field.label}
-              placeholder={field.label}
-              size='s'
-            />
-          )}
+        <TextArea
+          {...register(name, {
+            required: field.required,
+            minLength: field.min,
+            maxLength: field.max,
+            shouldUnregister: shouldUnregister
+          })}
+          size="s"
+          view={errors[name] ? 'negative' : 'default'}
+          placeholder={field.label}
+          label={field.label}
         />
       );
     case 'select':
       return (
-        <Controller
-          name={name}
-          control={control}
-          render={({ field: { onChange, value } }) => (
-            <Select
-              name={name}
-              value={value}
-              onChange={onChange}
-              // label={field.label}
-              items={field.options?.map(option => ({
-                value: option.value,
-                label: option.label
-              })) || []}
-              defaultValue={value}
-              multiselect={false}
-              size='s'
-            />
-          )}
+        <Select
+          {...register(name, {
+            required: field.required,
+            shouldUnregister: shouldUnregister
+          })}
+          items={field.options?.map((option) => ({
+            value: option.value.toString(),
+            label: option.label
+          }))}
+          defaultValue={getValues(name) as string}
+          multiselect={false}
+          size="s"
+          view={errors[name] ? 'negative' : 'default'}
         />
       );
     case 'radio':
       return (
-        <Controller
+        <RadioGroup aria-labelledby="radiogroup-title-id">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {field.options?.map((option) => (
+              <Radiobox
+                {...register(name, {
+                  required: field.required,
+                  shouldUnregister: shouldUnregister
+                })}
+                key={option.value}
+                value={option.value.toString()}
+                name={name}
+                view={errors[name] ? 'negative' : 'paragraph'}
+                size="s"
+                label={option.label}
+                description={option.description}
+              />
+            ))}
+          </div>
+        </RadioGroup>
+      );
+    case 'combobox':
+      return (
+        <Combobox
+          {...register(name, {
+            required: field.required,
+            shouldUnregister: shouldUnregister
+          })}
           name={name}
-          control={control}
-          render={({ field: { onChange, value } }) => (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {field.options?.map((option) => (
-                <Radiobox
-                  view='paragraph'
-                  key={option.value}
-                  name={name}
-                  value={option.value}
-                  description={option.description}
-                  checked={value === option.value}
-                  onChange={onChange}
-                  label={option.label}
-                  size='s'
-                />
-              ))}
-            </div>
-          )}
+          view={errors[name] ? 'negative' : 'default'}
+          items={field.options?.map((option) => ({
+            value: option.value.toString(),
+            label: option.label
+          }))}
+          size="s"
         />
       );
     case 'number':
       return (
-        <Controller
+        <TextField
+          {...register(name, {
+            required: field.required,
+            shouldUnregister: shouldUnregister,
+            valueAsNumber: true,
+            min: field.min,
+            max: field.max
+          })}
+          view={errors[name] ? 'negative' : 'default'}
           name={name}
-          control={control}
-          render={({ field: { value, onChange } }) => (
-            <NumberInput
-              name={name}
-              value={value as number}
-              onChange={onChange}
-              min={field.min}
-              max={field.max}
-              placeholder={field.label}
-              isManualInput
-              onDecrement={(value) => {
-                console.log('value', value);
-                onChange(value);
-              }}
-              onIncrement={(value) => {
-                console.log('value', value);
-                onChange(value);
-              }}
-              size='s'
-            />
-          )}
+          placeholder={field.label}
+          size="s"
         />
       );
     case 'boolean':
       return (
-        <Controller
-          name={name}
-          control={control}
-          render={({ field: { value, onChange } }) => (
-            <Switch value={value} description={field.info} label={field.label} onChange={onChange} size='s' toggleSize='s' />
-          )}
+        <Switch
+          {...register(name, {
+            required: field.required,
+            shouldUnregister: shouldUnregister
+          })}
+          size="s"
+          toggleSize="s"
+          label={field.label}
+          description={field.info}
         />
       );
     case 'array':
@@ -334,11 +464,12 @@ const renderField = (
         <Controller
           name={name}
           control={control}
+          shouldUnregister={shouldUnregister}
           render={({ field: { value = [], onChange } }) => {
             const sensors = useSensors(
               useSensor(PointerSensor, { activationConstraint: { distance: 10 } }),
               useSensor(KeyboardSensor, {
-                coordinateGetter: sortableKeyboardCoordinates,
+                coordinateGetter: sortableKeyboardCoordinates
               })
             );
 
@@ -386,20 +517,48 @@ const renderField = (
               onChange(newItems);
             };
 
+            const handleAdd = () => {
+              const generateNewArrayElement = (schema: Record<string, FieldConfig>) => {
+                const obj: any = { id: Date.now(), isExpanded: false };
+                Object.entries(schema).forEach(([key, field]) => {
+                  if (field.type) {
+                    switch (field.type) {
+                      case 'text':
+                        obj[key] = '';
+                        break;
+                      case 'number':
+                        obj[key] = 0;
+                        break;
+                      case 'boolean':
+                        obj[key] = false;
+                        break;
+                      case 'select':
+                        obj[key] = '';
+                        break;
+                      case 'radio':
+                        obj[key] = '';
+                        break;
+                      default:
+                        obj[key] = '';
+                    }
+                  }
+                });
+                return obj;
+              };
+              const newArrayElement = generateNewArrayElement(field.arrayFields);
+
+              onChange([...(value as any[]), newArrayElement]);
+            };
+
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleDragEnd}
-                >
+                <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragEnd={handleDragEnd}>
                   <SortableContext
                     items={(value as any[]).map((item: any) => `item-${item.id}`)}
                     strategy={verticalListSortingStrategy}
                   >
                     {(value as any[]).map((item: any, index: number) => (
                       <SortableItem
-                        field={field}
                         key={`item-${item.id}`}
                         id={`item-${item.id}`}
                         item={item}
@@ -412,21 +571,14 @@ const renderField = (
                     ))}
                   </SortableContext>
                 </DndContext>
-                <Button
-                  type="button"
-                  view="default"
-                  size="xxs"
-                  onClick={() => {
-                    onChange([...(value as any[]), { id: Date.now(), isExpanded: false }]);
-                  }}
-                >
-                  +
-                </Button>
+                <IconButton type="button" view="default" size="xs" onClick={handleAdd} pin="circle-circle">
+                  <IconPlus size="s" color="inherit" />
+                </IconButton>
               </div>
             );
           }}
         />
-      )
+      );
     default:
       return null;
   }
@@ -435,40 +587,117 @@ const renderField = (
 export const AutoForm: React.FC<AutoFormProps> = ({ config, onSubmit }) => {
   const componentName = Object.keys(config)[0];
   const componentConfig = config[componentName];
-  const schema = generateZodSchema(componentConfig.fields);
+  const schema = generateZodSchema(componentConfig.fields, componentConfig.children);
 
   const {
     control,
+    register,
     handleSubmit,
-    formState: { errors }
+    formState: { errors },
+    getValues,
+    watch
   } = useForm({
     resolver: zodResolver(schema),
-    defaultValues: componentConfig.defaultProps,
+    defaultValues: componentConfig.defaultProps
   });
+
+  console.log('Состояние формы', watch());
 
   return (
     <>
-      <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <form
+        onSubmit={(e) => {
+          console.log('Form submit event triggered');
+          handleSubmit(onSubmit)(e);
+        }}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '1rem'
+        }}
+      >
         <H3>{componentConfig.label}</H3>
         {Object.entries(componentConfig.fields).map(([fieldName, field]) => (
           <div key={fieldName} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-              <label style={{ display: "flex", alignItems: 'center', gap: '0.25rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                 <TextS>{field.label}</TextS>
-                {field.required && <Indicator size='s' view="negative" />}
+                {field.required && <Indicator size="s" view="negative" />}
               </label>
 
               {field.info && (
-                <Tooltip placement={"top"} trigger="hover" text={field.info} target={<Badge view="default" size="xs" pilled>i</Badge>} />
+                <Tooltip
+                  placement={'top'}
+                  trigger="hover"
+                  text={field.info}
+                  target={<IconInfoCircleFill size="xs" color="#000" />}
+                />
               )}
             </div>
-            {renderField(field, control, errors, fieldName)}
+            {renderField({ field, control, errors, name: fieldName, register, getValues })}
             {errors[fieldName] && (
               <span style={{ color: 'red', fontSize: '0.875rem' }}>{errors[fieldName]?.message as string}</span>
             )}
           </div>
         ))}
-        <Button type="submit" stretching='filled'>Сохранить</Button>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {componentConfig.children?.map((child, index) => (
+            <div key={child.key} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'row', gap: '0.5rem', justifyContent: 'space-between' }}>
+                <H4>{child.label}</H4>
+                <Controller
+                  name={`children.${index}.visible`}
+                  control={control}
+                  render={({ field: { value, onChange } }) => <Switch value={value} onChange={onChange} />}
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {getValues(`children.${index}.visible`) && (
+                  <div>
+                    {Object.entries(child.fields).map(([fieldName, field]) => (
+                      <div key={fieldName} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <TextS>{field.label}</TextS>
+                            {field.required && <Indicator size="s" view="negative" />}
+                          </label>
+
+                          {field.info && (
+                            <Tooltip
+                              placement={'top'}
+                              trigger="hover"
+                              text={field.info}
+                              target={<IconInfoCircleFill size="xs" color="#000" />}
+                            />
+                          )}
+                        </div>
+                        {renderField({
+                          field,
+                          control,
+                          errors,
+                          name: `children.${index}.${fieldName}`,
+                          shouldUnregister: true,
+                          register,
+                          getValues
+                        })}
+                        {errors[fieldName] && (
+                          <span style={{ color: 'red', fontSize: '0.875rem' }}>
+                            {errors[fieldName]?.message as string}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <Button type="submit" stretching="filled" size="s">
+          Сохранить
+        </Button>
       </form>
       <DevTool control={control} />
     </>
